@@ -1,0 +1,81 @@
+init: The Arch boot scripts
+
+The main Arch startup process is initiated by the program init, which spawns all other processes. The purpose of init is to bring the system into a usable state, using the boot scripts to do so. As previously mentioned, Arch uses BSD-style boot scripts. init reads the file /etc/inittab; the default inittab begins with the following:
+
+File: /etc/inittab
+...
+
+# Boot to console
+id:3:initdefault:
+# Boot to X11
+#id:5:initdefault:
+
+rc::sysinit:/etc/rc.sysinit
+rs:S1:wait:/etc/rc.single
+rm:2345:wait:/etc/rc.multi
+rh:06:wait:/etc/rc.shutdown
+su:S:wait:/sbin/sulogin
+
+...
+The first uncommented line defines the default system runlevel (3). When the kernel calls init:
+
+First, the main initialization script is run, /etc/rc.sysinit (a Bash script).
+If started in single user mode (runlevel 1 or S), the script /etc/rc.single is run.
+If in any other runlevel (2-5), /etc/rc.multi is run instead.
+The last script to run is /etc/rc.local (via /etc/rc.multi), which is empty by default.
+/etc/rc.sysinit
+rc.sysinit is a huge startup script that basically takes care of all hardware configuration and a number of general initialization tasks. It can be identified by its first task, printing the lines:
+
+Arch Linux
+http://www.archlinux.org
+Copyright 2002-2007 Judd Vinet
+Copyright 2007-2010 Aaron Griffin
+Distributed under the GNU General Public License (GPL)
+Next, rc.sysinit:
+
+sources the /etc/rc.conf script.
+sources the /etc/rc.d/functions script.
+displays a welcome message.
+mounts various virtual file systems.
+creates dummy device files.
+starts minilogd.
+outputs messages from dmesg.
+configures the hardware clock.
+empties the /proc/sys/kernel/hotplug file.
+starts udev and checks for udev events .
+starts the loopback interface.
+loads modules from the MODULES array defined in rc.conf.
+configures RAID and encrypted filesystem mappings.
+runs a forced check of partitions (fsck) if the /etc/fstab file contains instructions to do so.
+mounts local partitions and swap (networked drives are not mounted before a network profile is up).
+activates swap areas.
+sets the hostname, locale and system clock as defined in rc.conf.
+removes various leftover/temporary files, such as /tmp/*.
+configures the locale, console, and keyboard mappings.
+sets the console font.
+writes output from dmesg to /var/log/dmesg.log.
+/etc/rc.sysinit is a script and not a place for settings. It sources (i.e. reads and inherits variables and functions) rc.conf for settings and /etc/rc.d/functions for the functions that produce its graphical output (nice colors, alignments, switching 'busy' to 'done', etc.) There is no particular need to edit this file, although some may wish to do so in order to speed up the boot process.
+
+/etc/rc.single
+Single-user mode boots straight into the root user account and should only be used if one cannot boot normally. This script ensures no daemons are running except for the bare minimum: syslog-ng and udev. The single-user mode is useful for system recovery where preventing remote users from doing anything that might cause data loss or damage is necessary. In single-user mode, users can continue with the standard (multi-user) boot by entering 'exit' at the prompt.
+
+/etc/rc.multi
+/etc/rc.multi is run on any multi-user runlevel (i.e. 2, 3, 4, and 5), which basically means any ordinary boot. Typically, users don't notice the transition from rc.sysinit to rc.multi because rc.multi also uses /etc/rc.d/functions for handling output. This script:
+
+runs sysctl to apply the settings in /etc/sysctl.conf, thereby modifying kernel parameters at runtime; Arch has very few of these by default (mainly networking settings).
+starts the daemons, as per the DAEMONS array in rc.conf.
+runs /etc/rc.local, which is meant to handle user customizations.
+/etc/rc.local
+rc.local is the local multi-user startup script. Empty by default, it is a good place to put any last-minute commands the system should run at the very end of the boot process. Most common system configuration tasks (like loading modules, changing the console font, or setting up devices) usually have a dedicated place where they belong. To avoid confusion, ensure that whatever one intends to add to rc.local is not already residing in /etc/profile.d or any other existing configuration location instead.
+
+When editing this file, keep in mind that it is run after the basic setup (modules/daemons), as the root user, and whether or not X starts. Here is an example which just un-mutes the ALSA sound settings:
+
+File: /etc/rc.local
+#!/bin/bash
+
+# /etc/rc.local: Local multi-user startup script.
+
+amixer sset 'Master Mono' 50% unmute &> /dev/null
+amixer sset 'Master' 50% unmute &> /dev/null
+amixer sset 'PCM' 75% unmute &> /dev/null
+Another common usage for rc.local is to apply various hacks when one cannot make the ordinary initialization work correctly.
